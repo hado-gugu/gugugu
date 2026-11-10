@@ -59,10 +59,12 @@ def confirm_independent_names(previous, current):
     width, height = current.get("frame_size", [1, 1])
     used = set()
     for row in rows:
+        if "title_hold_until" in row:
+            continue
         box = row["box_norm"]
         options = []
         for index, old in enumerate(previous.get("candidates", [])):
-            if index in used or row["text"] != old["text"]:
+            if index in used or "title_hold_until" in old or row["text"] != old["text"]:
                 continue
             border_slot, old_border_slot = row.get("border_slot_id"), old.get("border_slot_id")
             if border_slot is not None or old_border_slot is not None:

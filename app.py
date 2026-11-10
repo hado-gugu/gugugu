@@ -667,7 +667,8 @@ class Controller(QWidget):
                     self.engine = VisionEngine(self.catalog.recognized_names, **options)
                 else:
                     self.engine = OfficialShopEngine(self.catalog.recognized_names,
-                                                     allow_legacy=official_mode == "manual", **options)
+                                                     allow_legacy=official_mode == "manual",
+                                                     stabilize_titles=IS_MACOS, **options)
                 self.engine_threads = requested_threads
                 self.engine_official_mode = official_mode
                 info = getattr(self.engine, "model_info", {})
@@ -688,6 +689,7 @@ class Controller(QWidget):
         if observation.get("candidates"):
             try:
                 latest = self.capture.latest_frame(max_age_ms=1500)
+                proof_frame = latest
                 stable = name_frames_stable(frame, latest, name_verification_regions(observation))
                 observation["frame_stable"] = stable
                 if stable is False:
@@ -702,6 +704,7 @@ class Controller(QWidget):
                     current["elapsed_ms"] += observation["elapsed_ms"]
                     if current["candidates"]:
                         after = self.capture.latest_frame(max_age_ms=1500)
+                        proof_frame = after
                         after_stable = name_frames_stable(latest, after, name_verification_regions(current))
                         current["frame_stable"] = after_stable
                         if after_stable is False:
@@ -719,6 +722,11 @@ class Controller(QWidget):
                             current["transient_uncertain"] = not changed_border
                             current["error"] = "名称暂时无法确认，正在核对最新画面……"
                     observation = current
+                if (IS_MACOS and proof_frame.sequence > observation["sequence"]
+                        and proof_frame.timestamp > observation["timestamp"]):
+                    observation["candidates"] = self.engine.recheck_held_titles(observation, proof_frame)
+                    if observation["status"] == "ready" and not observation["candidates"]:
+                        observation["status"] = "no_candidates"
             except CaptureUnavailable:
                 observation["status"] = "frame_stale"
                 observation["error"] = "窗口画面不可用，等待新画面。"
@@ -765,6 +773,11 @@ class Controller(QWidget):
             self.set_status("识别结果已过期，正在等待新画面。")
             return
         keys, matches, names = set(), [], []
+        now = time.monotonic()
+        shown_keys = set()
+        if IS_MACOS:
+            shown_keys = {(row["kind"], row["id"], row["slot_anchor_id"])
+                          for row in self.matches if row.get("title_hold_until", float("inf")) > now}
         state = self.store.state
         resolved = []
         for candidate in observation["candidates"]:
@@ -781,10 +794,15 @@ class Controller(QWidget):
         else:
             anchored = self.marker_anchors.update(resolved, context_key=context)
         for candidate in anchored:
-            names.append(candidate["name"])
             key = (candidate["kind"], candidate["id"], candidate["slot_anchor_id"])
-            keys.add(key)
             reminder = self.catalog.reminder(state, candidate["kind"], candidate["id"])
+            hold_until = candidate.get("title_hold_until") if IS_MACOS else None
+            if hold_until is not None:
+                if reminder and hold_until > now and key in shown_keys:
+                    matches.append({**candidate, "reminder": reminder})
+                continue
+            names.append(candidate["name"])
+            keys.add(key)
             fast_confirmed = (observation.get("frame_stable") is True
                               or candidate.get("independently_confirmed") is True
                               or candidate.get("frame_verified") is True) and candidate["score"] >= .95
@@ -834,6 +852,9 @@ class Controller(QWidget):
         if self.closing:
             return
         self.expire_uncertain()
+        if IS_MACOS:
+            now = time.monotonic()
+            self.matches = [row for row in self.matches if row.get("title_hold_until", float("inf")) > now]
         if self.future and self.future.done():
             future, kind, generation = self.future, self.job_kind, self.job_generation
             self.future, self.job_kind = None, None

@@ -1,8 +1,8 @@
-name: Build Gugugu 1.0.1 for macOS
+name: Build Gugugu 1.0.1 macOS stability patch
 
 on:
   push:
-    branches: [build/macos-1.0.1]
+    branches: [build/macos-1.0.1-stability]
 
 permissions:
   contents: read
@@ -60,14 +60,14 @@ jobs:
             printf 'Unexpected documentation in the package:\n%s\n' "$forbidden"
             exit 1
           fi
-          archive="$RUNNER_TEMP/Gugugu-1.0.1-macOS-arm64.zip"
+          archive="$RUNNER_TEMP/Gugugu-1.0.1-macOS-stability-arm64.zip"
           ditto -c -k "$package" "$archive"
           unzip -tq "$archive"
           shasum -a 256 "$archive"
       - uses: actions/upload-artifact@v4
         with:
-          name: Gugugu-1.0.1-macOS-arm64
-          path: ${{ runner.temp }}/Gugugu-1.0.1-macOS-arm64.zip
+          name: Gugugu-1.0.1-macOS-stability-arm64
+          path: ${{ runner.temp }}/Gugugu-1.0.1-macOS-stability-arm64.zip
           if-no-files-found: error
           compression-level: 0
           retention-days: 7

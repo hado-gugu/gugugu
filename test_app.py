@@ -40,6 +40,39 @@ class ControllerTests(unittest.TestCase):
         from PySide6.QtWidgets import QApplication
         cls.application = QApplication.instance() or QApplication([])
 
+    def test_mac_hold_can_only_continue_a_shown_reminder_and_expires_on_tick(self):
+        from app import Controller
+
+        with tempfile.TemporaryDirectory() as folder, patch("app.native.list_windows", return_value=[]):
+            widget = Controller(folder)
+            widget.timer.stop()
+            self.addCleanup(widget.deleteLater)
+            self.addCleanup(widget.executor.shutdown, wait=True)
+            widget.store.import_json((Path(__file__).parent / "samples/web-demo.json").read_text(encoding="utf-8"))
+            now = time.monotonic()
+            candidate = {"text": "野鬃", "score": .99, "box_norm": [.4, .8, .5, .9],
+                         "slot_roi_norm": [.38, .6, .52, .93], "name_roi_norm": [.4, .8, .5, .9],
+                         "border_slot_id": "one", "border_layout_key": "shop", "border_anchor_norm": [.4, .8]}
+            held = {**candidate, "title_hold_until": now + .65}
+
+            def accept(sequence, row):
+                widget.accept_observation({"sequence": sequence, "timestamp": now, "candidates": [row],
+                                           "frame_stable": True, "elapsed_ms": 20,
+                                           "diagnostics": {"geometry_source": "borders", "layout_key": "shop"}})
+
+            with patch("app.IS_MACOS", True), patch("app.time.monotonic", return_value=now) as clock:
+                accept(1, held)
+                self.assertEqual(widget.matches, [])
+                self.assertFalse(widget.previous_keys)
+                accept(2, candidate)
+                self.assertEqual(len(widget.matches), 1)
+                accept(3, held)
+                self.assertEqual(len(widget.matches), 1)
+                self.assertFalse(widget.previous_keys)
+                clock.return_value = now + .66
+                widget.tick()
+                self.assertEqual(widget.matches, [])
+
     def test_old_observations_clear_after_preset_and_stop(self):
         from app import Controller
         with tempfile.TemporaryDirectory() as folder, patch("app.native.list_windows", return_value=[]):
