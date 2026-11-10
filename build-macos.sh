@@ -49,5 +49,23 @@ for model in PP-OCRv6_det_small.onnx PP-OCRv6_rec_small.onnx ch_ppocr_mobile_v2.
         exit 1
     fi
 done
+
+"$python" -X utf8 - "$bundle/Contents/Info.plist" <<'PY'
+from pathlib import Path
+import plistlib
+import sys
+
+from branding import APP_NAME, APP_VERSION
+
+path = Path(sys.argv[1])
+info = plistlib.loads(path.read_bytes())
+info.update(CFBundleDisplayName=APP_NAME, CFBundleShortVersionString=APP_VERSION,
+            CFBundleVersion=APP_VERSION)
+path.write_bytes(plistlib.dumps(info, sort_keys=False))
+PY
+# PyInstaller signs the nested binaries. Refresh the outer seal after editing its plist.
+codesign --force --sign - "$bundle"
+codesign --verify --deep --strict --verbose=2 "$bundle"
+
 cp "$root/$guide" "$output/$guide"
 printf '构建完成：%s\n' "$bundle"

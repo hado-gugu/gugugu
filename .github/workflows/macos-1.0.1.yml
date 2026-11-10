@@ -1,0 +1,73 @@
+name: Build Gugugu 1.0.1 for macOS
+
+on:
+  push:
+    branches: [build/macos-1.0.1]
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: arm64
+      - name: Build the Apple Silicon application
+        shell: bash
+        run: bash build-macos.sh
+      - name: Check the bundle and launch with scanning off
+        shell: bash
+        run: |
+          bundles=(dist-macos/arm64-beta.*/Gugugu.app)
+          test "${#bundles[@]}" -eq 1
+          bundle="${bundles[0]}"
+          binary="$bundle/Contents/MacOS/Gugugu"
+          test "$(lipo -archs "$binary")" = arm64
+          test "$(plutil -extract CFBundleShortVersionString raw "$bundle/Contents/Info.plist")" = 1.0.1
+          codesign --verify --deep --strict "$bundle"
+          "$binary" --help | grep -F -- '--data-dir'
+
+          state="$(mktemp -d "$RUNNER_TEMP/gugugu-launch.XXXXXXXX")"
+          QT_QPA_PLATFORM=offscreen "$binary" --data-dir "$state" > "$state/startup.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          sleep 7
+          if ! kill -0 "$pid" || [[ ! -f "$state/errors.log" ]]; then
+            cat "$state/startup.log"
+            if [[ -f "$state/errors.log" ]]; then cat "$state/errors.log"; fi
+            exit 1
+          fi
+          echo 'The packaged controller started with scanning disabled.'
+      - name: Create the Mac download ZIP
+        shell: bash
+        run: |
+          bundles=(dist-macos/arm64-beta.*/Gugugu.app)
+          package="$RUNNER_TEMP/Gugugu-1.0.1"
+          mkdir "$package"
+          ditto "${bundles[0]}" "$package/Gugugu.app"
+          cp "${bundles[0]%/*}/使用前请先阅读.txt" "$package/使用前请先阅读.txt"
+          cmp 使用前请先阅读.txt "$package/使用前请先阅读.txt"
+          cp LICENSE.txt "$package/LICENSE.txt"
+          forbidden="$(find "$package" \( -iname 'readme*' -o -iname 'changelog*' -o -name '更新日志*' \) -print)"
+          if [[ -n "$forbidden" ]]; then
+            printf 'Unexpected documentation in the package:\n%s\n' "$forbidden"
+            exit 1
+          fi
+          archive="$RUNNER_TEMP/Gugugu-1.0.1-macOS-arm64.zip"
+          ditto -c -k "$package" "$archive"
+          unzip -tq "$archive"
+          shasum -a 256 "$archive"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Gugugu-1.0.1-macOS-arm64
+          path: ${{ runner.temp }}/Gugugu-1.0.1-macOS-arm64.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
