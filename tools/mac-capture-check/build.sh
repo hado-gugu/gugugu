@@ -30,7 +30,7 @@ plutil -lint "$bundle/Contents/Info.plist"
 xcrun --sdk macosx swiftc -O -target arm64-apple-macosx14.4 -module-name "$app_name" \
     -framework AppKit -framework CoreGraphics -framework ScreenCaptureKit \
     "$source_dir/$app_name.swift" -o "$bundle/Contents/MacOS/$app_name"
-xcrun lipo -verify_arch arm64 "$bundle/Contents/MacOS/$app_name"
+test "$(xcrun lipo -archs "$bundle/Contents/MacOS/$app_name")" = arm64
 codesign --force --sign - "$bundle"
 codesign --verify --deep --strict "$bundle"
 
