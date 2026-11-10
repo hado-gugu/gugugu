@@ -1,0 +1,12 @@
+# Apple Silicon, macOS 14.4+, CPython 3.12.
+PySide6==6.12.0
+numpy==2.5.4
+opencv-python-headless==5.0.0.93
+rapidocr==3.10.0
+onnxruntime==1.31.1
+omegaconf==2.4.0
+pyobjc-core==13.0
+pyobjc-framework-Cocoa==13.0
+pyobjc-framework-CoreMedia==13.0
+pyobjc-framework-Quartz==13.0
+pyobjc-framework-ScreenCaptureKit==13.0

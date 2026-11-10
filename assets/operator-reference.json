@@ -1,0 +1,1153 @@
+{
+  "seasonId": "V3_1",
+  "operators": {
+    "char_002_amiya": {
+      "effectTags": [
+        "持续叠加",
+        "辅助叠层"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_1012_skadi2": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_1014_nearl2": {
+      "effectTags": [
+        "持续叠加",
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_1016_agoat2": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_1019_siege2": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_1023_ghost2": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_1027_greyy2": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_1031_slent2": {
+      "effectTags": [
+        "持续叠加",
+        "辅助叠层"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_1034_jesca2": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_1036_fang2": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_1038_whitw2": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_1039_thorn2": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_1040_blaze2": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_1042_phatm2": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "进入休整期时"
+      ]
+    },
+    "char_1045_svash2": {
+      "effectTags": [
+        "持续叠加",
+        "辅助叠层"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_1046_sbell2": {
+      "effectTags": [
+        "持续叠加",
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_1047_halo2": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_1051_headb2": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_113_cqbw": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_127_estell": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_129_bluep": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_135_halo": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_140_whitew": {
+      "effectTags": [
+        "单次叠层"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_143_ghost": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_150_snakek": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_171_bldsk": {
+      "effectTags": [
+        "持续叠加",
+        "辅助叠层"
+      ],
+      "triggerTimes": [
+        "战斗开始时",
+        "开启技能时"
+      ]
+    },
+    "char_174_slbell": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_179_cgbird": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗结束时"
+      ]
+    },
+    "char_180_amgoat": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_183_skgoat": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_185_frncat": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_188_helage": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_193_frostl": {
+      "effectTags": [
+        "单次叠层"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_194_leto": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗开始时"
+      ]
+    },
+    "char_195_glassb": {
+      "effectTags": [
+        "经济"
+      ],
+      "triggerTimes": [
+        "其他"
+      ]
+    },
+    "char_199_yak": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_2015_dusk": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_2025_shu": {
+      "effectTags": [
+        "单次叠层"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_2026_yu": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_202_demkni": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "其他"
+      ]
+    },
+    "char_206_gnosis": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_218_cuttle": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_219_meteo": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_237_gravel": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_249_mlyss": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_258_podego": {
+      "effectTags": [
+        "经济"
+      ],
+      "triggerTimes": [
+        "售出时"
+      ]
+    },
+    "char_263_skadi": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_264_f12yin": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_274_astesi": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "其他"
+      ]
+    },
+    "char_291_aglina": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_293_thorns": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_322_lmlee": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_325_bison": {
+      "effectTags": [
+        "单次叠层"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_328_cammou": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_332_archet": {
+      "effectTags": [
+        "持续叠加",
+        "辅助叠层"
+      ],
+      "triggerTimes": [
+        "进入休整期时"
+      ]
+    },
+    "char_333_sidero": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_337_utage": {
+      "effectTags": [
+        "单次叠层"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_341_sntlla": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时",
+        "休整期开始时"
+      ]
+    },
+    "char_346_aosta": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_347_jaksel": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_350_surtr": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_355_ethan": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "售出时"
+      ]
+    },
+    "char_358_lisa": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "进入休整期时"
+      ]
+    },
+    "char_367_swllow": {
+      "effectTags": [
+        "单次叠层"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_381_bubble": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_391_rosmon": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_4009_irene": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_400_weedy": {
+      "effectTags": [
+        "经济"
+      ],
+      "triggerTimes": [
+        "其他"
+      ]
+    },
+    "char_4010_etlchi": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4013_kjera": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_4016_kazema": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4026_vulpis": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_4027_heyak": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4031_liesel": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "刷新时"
+      ]
+    },
+    "char_4037_demetr": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4041_chnut": {
+      "effectTags": [
+        "单次叠层"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_4042_lumen": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗结束时"
+      ]
+    },
+    "char_4046_ebnhlz": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4047_pianst": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_4054_malist": {
+      "effectTags": [
+        "经济"
+      ],
+      "triggerTimes": [
+        "其他"
+      ]
+    },
+    "char_4055_bgsnow": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4058_pepe": {
+      "effectTags": [
+        "持续叠加",
+        "辅助叠层"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4064_mlynar": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4065_judge": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4066_highmo": {
+      "effectTags": [
+        "经济"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_4072_ironmn": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "进入休整期时"
+      ]
+    },
+    "char_4082_qiubai": {
+      "effectTags": [
+        "单次叠层"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_4088_hodrer": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4098_vvana": {
+      "effectTags": [
+        "持续叠加",
+        "辅助叠层"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4114_harold": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4116_blkkgt": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4133_logos": {
+      "effectTags": [
+        "单次叠层",
+        "战力"
+      ],
+      "triggerTimes": [
+        "获得时",
+        "战斗中"
+      ]
+    },
+    "char_4134_cetsyr": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_4137_udflow": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4139_papyrs": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4145_ulpia": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4146_nymph": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4147_mitm": {
+      "effectTags": [
+        "持续叠加",
+        "辅助叠层"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_4151_tinman": {
+      "effectTags": [
+        "单次叠层"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_4162_cathy": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_4163_rosesa": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4165_ctrail": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4166_varkis": {
+      "effectTags": [
+        "单次叠层"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_416_zumama": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4177_brigid": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4179_monstr": {
+      "effectTags": [
+        "持续叠加",
+        "辅助叠层"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4193_lemuen": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4198_christ": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_4202_haruka": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4203_kichi": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "售出时"
+      ]
+    },
+    "char_4204_mantra": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4207_branch": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "进入休整期时"
+      ]
+    },
+    "char_420_flamtl": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_4211_snhunt": {
+      "effectTags": [
+        "单次叠层"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_4221_ju": {
+      "effectTags": [
+        "单次叠层"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_4222_taraxa": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_4224_turdus": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "进入休整期时"
+      ]
+    },
+    "char_4226_veen": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4228_closur": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_422_aurora": {
+      "effectTags": [
+        "单次叠层"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_4230_mcnist": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "进入休整期时"
+      ]
+    },
+    "char_4231_clemnt": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗开始时"
+      ]
+    },
+    "char_4232_hbound": {
+      "effectTags": [
+        "持续叠加",
+        "辅助叠层"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_423_blemsh": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4244_tocka": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_4245_alga": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_4247_oxi": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_426_billro": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_427_vigil": {
+      "effectTags": [
+        "持续叠加",
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_430_fartth": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_437_mizuki": {
+      "effectTags": [
+        "战力"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_455_nothin": {
+      "effectTags": [
+        "经济"
+      ],
+      "triggerTimes": [
+        "获得时"
+      ]
+    },
+    "char_469_indigo": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_472_pasngr": {
+      "effectTags": [
+        "资源",
+        "经济"
+      ],
+      "triggerTimes": [
+        "进入休整期时"
+      ]
+    },
+    "char_474_glady": {
+      "effectTags": [
+        "资源"
+      ],
+      "triggerTimes": [
+        "进入休整期时"
+      ]
+    },
+    "char_484_robrta": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_485_pallas": {
+      "effectTags": [
+        "持续叠加",
+        "辅助叠层"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_488_buildr": {
+      "effectTags": [
+        "持续叠加",
+        "辅助叠层"
+      ],
+      "triggerTimes": [
+        "进入休整期时"
+      ]
+    },
+    "char_492_quercu": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    },
+    "char_496_wildmn": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "战斗中"
+      ]
+    },
+    "char_499_kaitou": {
+      "effectTags": [
+        "持续叠加"
+      ],
+      "triggerTimes": [
+        "休整期结束时"
+      ]
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "kind": "stronghold.team-planner",
+  "scope": "current",
+  "version": 2,
+  "presets": [
+    {
+      "id": "sample_web_demo",
+      "name": "规程·序列 I 示例（可选导入）",
+      "targets": [
+        "char_496_wildmn",
+        "char_4207_branch",
+        "char_469_indigo"
+      ],
+      "equipment": [
+        "chess_item_1_03_e_a"
+      ]
+    }
+  ],
+  "activeId": "sample_web_demo",
+  "transitions": [],
+  "enabled": true
+}
