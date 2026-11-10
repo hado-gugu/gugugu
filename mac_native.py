@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import math
+import subprocess
 from typing import Any
 
 try:
     import AppKit
+    from Foundation import NSBundle
     import objc
     import Quartz
 except ImportError:
-    AppKit = objc = Quartz = None
+    AppKit = NSBundle = objc = Quartz = None
+
+
+GUGUGU_BUNDLE_ID = "com.haoxindegezi.gugugu"
+CAPTURE_RESET_COMMAND = ("/usr/bin/tccutil", "reset", "ScreenCapture", GUGUGU_BUNDLE_ID)
 
 
 class NativeError(RuntimeError):
@@ -32,6 +38,16 @@ def request_capture_permission() -> bool:
     """Request Screen Recording permission from an explicit UI action."""
     request = getattr(Quartz, "CGRequestScreenCaptureAccess", None)
     return bool(request()) if request is not None else has_capture_permission()
+
+
+def reset_capture_permission() -> None:
+    """Reset only the packaged app's Screen Recording decision for this user."""
+    if NSBundle is None or NSBundle.mainBundle().bundleIdentifier() != GUGUGU_BUNDLE_ID:
+        raise NativeError("请在解压后的 Gugugu.app 中重置录屏权限。")
+    result = subprocess.run(CAPTURE_RESET_COMMAND, capture_output=True, text=True, errors="replace", timeout=8)
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise NativeError(detail or f"tccutil 退出码 {result.returncode}")
 
 
 def _profile_id(display_id: int) -> str:

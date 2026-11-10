@@ -27,6 +27,23 @@ def display(display_id=17, *, main=True):
 
 
 class DisplayMetadataTests(unittest.TestCase):
+    def test_permission_reset_targets_only_gugugu_screen_recording(self):
+        bundle = Mock()
+        bundle.mainBundle.return_value.bundleIdentifier.return_value = "com.haoxindegezi.gugugu"
+        with patch.object(mac_native, "NSBundle", bundle), patch.object(mac_native.subprocess, "run") as run:
+            run.return_value = SimpleNamespace(returncode=0)
+            mac_native.reset_capture_permission()
+            run.assert_called_once_with(("/usr/bin/tccutil", "reset", "ScreenCapture", "com.haoxindegezi.gugugu"),
+                                        capture_output=True, text=True, errors="replace", timeout=8)
+
+    def test_permission_reset_does_not_run_from_another_bundle(self):
+        bundle = Mock()
+        bundle.mainBundle.return_value.bundleIdentifier.return_value = "com.haoxindegezi.gugugu.capturecheck"
+        with patch.object(mac_native, "NSBundle", bundle), patch.object(mac_native.subprocess, "run") as run:
+            with self.assertRaises(mac_native.NativeError):
+                mac_native.reset_capture_permission()
+            run.assert_not_called()
+
     def test_explicit_permission_request_is_not_short_circuited_by_preflight(self):
         quartz = Mock()
         quartz.CGPreflightScreenCaptureAccess.return_value = True

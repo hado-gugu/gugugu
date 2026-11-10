@@ -241,9 +241,13 @@ class Controller(QWidget):
             self.capture_probe_button = QPushButton("检测录屏")
             self.capture_probe_button.setToolTip("读取一帧所选显示器画面，确认系统是否能取图。画面只在内存中使用。")
             self.capture_probe_button.clicked.connect(self.diagnose_capture)
+            self.capture_reset_button = QPushButton("重置录屏权限")
+            self.capture_reset_button.setToolTip("清除咕顾谷及同一应用标识旧版的录屏授权记录。")
+            self.capture_reset_button.clicked.connect(self.reset_mac_capture_permission)
             permission_row = QHBoxLayout()
             permission_row.addWidget(self.permission_button, 1)
             permission_row.addWidget(self.capture_probe_button, 1)
+            permission_row.addWidget(self.capture_reset_button, 1)
             body.addLayout(permission_row)
         else:
             self.windows = source_picker
@@ -459,11 +463,47 @@ class Controller(QWidget):
     def update_display_controls(self):
         self.permission_button.setVisible(self.mac_capture_denied or
                                           not (self.mac_capture_allowed or self.mac_capture_verified))
+        resetting = self.job_kind == "capture_reset"
+        self.permission_button.setEnabled(not resetting)
+        self.capture_reset_button.setEnabled(not resetting)
         probing = self.capture_probe_requested or self.job_kind == "capture_probe"
-        available = self.capture is not None and not self.display_switch_pending and not probing
+        available = self.capture is not None and not (self.display_switch_pending or probing or resetting)
         self.capture_probe_button.setEnabled(available)
         self.calibrate_button.setEnabled(available)
         self.power.setEnabled(available and self.profile is not None)
+
+    def reset_mac_capture_permission(self):
+        if (self.scanning or self.future or self.capture_running or self.display_switch_pending
+                or self.capture_probe_requested or self.calibration_requested):
+            self.set_status("请先关闭扫描，等当前操作结束后再重置录屏权限。")
+            return
+        buttons = QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel
+        answer = QMessageBox.question(
+            self, "重置录屏权限",
+            "将清除当前 Mac 用户对咕顾谷及同一应用标识旧版的录屏授权记录。\n\n"
+            "配队和框选范围会保留。成功后咕顾谷会退出，请重新打开并点「授权屏幕录制」。",
+            buttons, QMessageBox.StandardButton.Cancel,
+        )
+        if answer == QMessageBox.StandardButton.Yes and self.submit("capture_reset", native.reset_capture_permission):
+            self.set_status("正在重置录屏权限……")
+            self.update_display_controls()
+
+    def finish_mac_capture_reset(self, future):
+        try:
+            future.result()
+        except Exception:
+            logging.exception("Could not reset Gugugu Screen Recording permission")
+            self.update_display_controls()
+            self.set_status("录屏权限重置失败，可在终端手动重置。")
+            QMessageBox.warning(
+                self, "录屏权限重置失败",
+                "请完全退出咕顾谷，在终端运行下面这条命令，再打开 Gugugu.app 并重新授权。\n\n"
+                + " ".join(native.CAPTURE_RESET_COMMAND),
+            )
+            return
+        QMessageBox.information(self, "录屏权限已重置",
+                                "咕顾谷即将退出。请重新打开 Gugugu.app，再点「授权屏幕录制」。")
+        self.close()
 
     def request_mac_capture_permission(self):
         try:
@@ -1052,6 +1092,9 @@ class Controller(QWidget):
         if self.future and self.future.done():
             future, kind, generation = self.future, self.job_kind, self.job_generation
             self.future, self.job_kind = None, None
+            if IS_MACOS and kind == "capture_reset":
+                self.finish_mac_capture_reset(future)
+                return
             try:
                 result = future.result()
                 if generation == self.generation:
