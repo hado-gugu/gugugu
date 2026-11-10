@@ -43,6 +43,36 @@ _STEPS = (
     ),
 )
 
+_MAC_STEPS = (
+    (
+        "1 选择显示器",
+        "在要识别的显示器上打开游戏",
+        None,
+        "",
+        "在游戏或网页中进入卫戍协议对局，展开商店。咕顾谷默认使用主显示器。"
+        "如果商店在另一块屏幕，从显示器下拉框切换。连接新显示器后点「刷新显示器」。",
+        "首次使用需要授权屏幕录制。授权后按系统提示重新打开咕顾谷。",
+    ),
+    (
+        "2 框选商店",
+        "框住整排卡片",
+        None,
+        "",
+        "保持商店在所选显示器上可见，点「框选 / 重新校准商店」。在显示器画面中框住所有卡片边缘，"
+        "包含升级区并向左留出新槽位的空间，然后点「保存范围」。",
+        "每块显示器分别保存范围。商店在同一显示器内移位、改变大小或切换全屏后，请重新框选。",
+    ),
+    ("3 配置提醒", *_STEPS[1][1:]),
+    (
+        "4 开启扫描",
+        "回到游戏看卡片提醒",
+        None,
+        "",
+        "点主控的「开启扫描」，再回到游戏或网页。爱心标出目标干员和装备，拇指标出过渡干员。",
+        "切换前台应用时会先清除旧标记，再按当前画面识别。请让商店保持可见。",
+    ),
+)
+
 
 def _label(text, name=""):
     label = QLabel(text)
@@ -71,7 +101,7 @@ class _Illustration(QLabel):
 
 
 class TutorialDialog(QDialog):
-    def __init__(self, parent, resource_root):
+    def __init__(self, parent, resource_root, *, macos=False):
         super().__init__(parent, Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
         self.setWindowTitle(f"{APP_NAME} · 使用教程")
         self.setWindowIcon(parent.windowIcon())
@@ -89,19 +119,22 @@ class TutorialDialog(QDialog):
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(9)
         layout.addWidget(_label("快速上手", "tutorialHeading"))
-        layout.addWidget(_label("按前 3 步开启提醒。需要校准商店时，查看第 4 页。", "tutorialIntro"))
+        intro = ("先选择显示器并框选商店，再配置并开启提醒。" if macos
+                 else "按前 3 步开启提醒。需要校准商店时，查看第 4 页。")
+        layout.addWidget(_label(intro, "tutorialIntro"))
 
         self.pages = QTabWidget()
         self.pages.setUsesScrollButtons(True)
-        for tab, title, filename, description, body, tip in _STEPS:
+        for tab, title, filename, description, body, tip in (_MAC_STEPS if macos else _STEPS):
             page = QWidget()
             content = QVBoxLayout(page)
             content.setContentsMargins(12, 12, 12, 12)
             content.setSpacing(10)
             content.addWidget(_label(title, "tutorialStep"))
-            pixmap = QPixmap(str(resource_root / "assets" / "tutorial" / filename))
-            if not pixmap.isNull():
-                content.addWidget(_Illustration(pixmap, description))
+            if filename:
+                pixmap = QPixmap(str(resource_root / "assets" / "tutorial" / filename))
+                if not pixmap.isNull():
+                    content.addWidget(_Illustration(pixmap, description))
             content.addWidget(_label(body))
             content.addWidget(_label(tip, "tutorialTip"))
             content.addStretch()

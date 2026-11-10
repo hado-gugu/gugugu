@@ -1,15 +1,9 @@
-"""Quartz window metadata and AppKit focus for the screen-only assistant.
-
-Window rectangles are global logical points with an exclusive right and bottom.
-Quartz reports the whole window. The capture backend maps those points to its
-own image pixels, while Qt uses the points directly to position the overlay.
-"""
+"""Quartz display metadata and AppKit overlay support for macOS."""
 
 from __future__ import annotations
 
 import math
-import os
-from typing import Any, Iterable
+from typing import Any
 
 try:
     import AppKit
@@ -20,12 +14,12 @@ except ImportError:
 
 
 class NativeError(RuntimeError):
-    """A macOS window operation could not be completed safely."""
+    """A macOS display operation could not be completed safely."""
 
 
 def _require_frameworks() -> None:
     if AppKit is None or objc is None or Quartz is None:
-        raise NativeError("缺少 macOS 窗口支持组件，请按安装说明安装 PyObjC。")
+        raise NativeError("缺少 macOS 显示器支持组件，请按安装说明安装 PyObjC。")
 
 
 def has_capture_permission() -> bool:
@@ -40,206 +34,77 @@ def request_capture_permission() -> bool:
     return has_capture_permission() or bool(request and request())
 
 
-def _window_rows(onscreen: bool):
-    option = Quartz.kCGWindowListOptionOnScreenOnly if onscreen else Quartz.kCGWindowListOptionAll
-    rows = Quartz.CGWindowListCopyWindowInfo(option | Quartz.kCGWindowListExcludeDesktopElements,
-                                           Quartz.kCGNullWindowID)
-    if rows is None:
-        raise NativeError("interactive_desktop_unavailable")
-    return rows
+def _profile_id(display_id: int) -> str:
+    # Some virtual displays don't report a serial number. Keep separate
+    # per-display profiles in that case without guessing a hardware identity.
+    serial = int(Quartz.CGDisplaySerialNumber(display_id))
+    if serial:
+        vendor = int(Quartz.CGDisplayVendorNumber(display_id))
+        model = int(Quartz.CGDisplayModelNumber(display_id))
+        return f"serial-{vendor:08x}-{model:08x}-{serial:08x}"
+    return f"display-{display_id:08x}"
 
 
-def _window_id(row) -> int:
-    return int(row[Quartz.kCGWindowNumber])
+def _display_geometry(display_id: int, main_id: int) -> dict[str, Any]:
+    if not 0 < display_id <= 0xFFFFFFFF or not Quartz.CGDisplayIsActive(display_id):
+        raise NativeError("所选显示器当前不可用，请刷新显示器列表。")
+    (x, y), (width, height) = Quartz.CGDisplayBounds(display_id)
+    if not all(math.isfinite(value) for value in (x, y, width, height)) or min(width, height) <= 0:
+        raise NativeError("所选显示器当前没有有效画面，请刷新显示器列表。")
 
-
-def _owner_pid(row) -> int:
-    return int(row[Quartz.kCGWindowOwnerPID])
-
-
-def _find_row(hwnd: int, rows):
-    return next((row for row in rows if _window_id(row) == hwnd), None)
-
-
-def _window_row(hwnd: int, onscreen_rows=None):
-    hwnd = int(hwnd)
-    if not 0 < hwnd <= 0xFFFFFFFF:
-        raise NativeError("target_closed")
-    if onscreen_rows is None:
-        onscreen_rows = _window_rows(onscreen=True)
-    row = _find_row(hwnd, onscreen_rows)
-    if row is not None:
-        return row, True
-    row = _find_row(hwnd, _window_rows(onscreen=False))
-    if row is None:
-        raise NativeError("target_closed")
-    return row, bool(row.get(Quartz.kCGWindowIsOnscreen, False))
-
-
-def _title(row) -> str:
-    title = str(row.get(Quartz.kCGWindowName) or "").strip()
-    if title:
-        return title
-    owner = str(row.get(Quartz.kCGWindowOwnerName) or "应用").strip()
-    return f"{owner} · 窗口 {_window_id(row)}"
-
-
-def _visible(row, onscreen: bool) -> bool:
-    return onscreen and float(row[Quartz.kCGWindowAlpha]) > 0
-
-
-def _normal(row) -> bool:
-    return int(row[Quartz.kCGWindowLayer]) == 0
-
-
-def _window_rect(row) -> tuple[int, int, int, int]:
-    ok, rect = Quartz.CGRectMakeWithDictionaryRepresentation(row[Quartz.kCGWindowBounds], None)
-    if not ok:
-        raise NativeError("target_invalid_bounds")
-    (x, y), (width, height) = rect
-    if not all(math.isfinite(value) for value in (x, y, width, height)) or min(width, height) < 0:
-        raise NativeError("target_invalid_bounds")
     left, top = math.floor(x), math.floor(y)
-    right = math.ceil(x + width) if width else left
-    bottom = math.ceil(y + height) if height else top
-    return left, top, right, bottom
+    right, bottom = math.ceil(x + width), math.ceil(y + height)
+    point_size = right - left, bottom - top
+    mode = Quartz.CGDisplayCopyDisplayMode(display_id)
+    if mode is None:
+        raise NativeError("无法读取所选显示器的当前模式。")
+    pixels = int(Quartz.CGDisplayModeGetPixelWidth(mode)), int(Quartz.CGDisplayModeGetPixelHeight(mode))
+    rotation = float(Quartz.CGDisplayRotation(display_id))
+    if min(pixels) <= 0 or not math.isfinite(rotation):
+        raise NativeError("所选显示器当前没有有效的显示模式。")
+
+    is_main = display_id == main_id
+    label = "主显示器" if is_main else f"显示器 {display_id}"
+    profile_id = _profile_id(display_id)
+    return {"display_id": display_id, "title": f"{label} · {point_size[0]} × {point_size[1]}",
+            "is_main": is_main, "exe": "macos-display", "class_name": profile_id, "profile_id": profile_id,
+            "client_screen_rect": (left, top, right, bottom), "client_size": point_size,
+            "display_pixel_size": pixels, "display_rotation": rotation,
+            "coordinate_space": "quartz_global_points"}
 
 
-def _geometry(row, onscreen: bool, include_title: bool) -> dict[str, Any]:
-    rect = _window_rect(row)
-    left, top, right, bottom = rect
-    return {"hwnd": _window_id(row), "pid": _owner_pid(row), "title": _title(row) if include_title else "",
-            "visible": _visible(row, onscreen), "minimized": False, "cloaked": not onscreen,
-            "client_screen_rect": rect, "client_rect": rect, "client_size": (right - left, bottom - top),
-            "window_rect": rect, "frame_rect": rect, "capture_screen_rect": rect,
-            "frame_bounds_available": True, "client_offset_in_window": (0, 0),
-            "client_offset_in_frame": (0, 0), "coordinate_space": "quartz_global_points"}
-
-
-def _process_identity(pid: int) -> dict[str, Any]:
-    application = AppKit.NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
-    if application is None or application.isTerminated():
-        raise NativeError("target_identity_unavailable")
-    bundle = str(application.bundleIdentifier() or "")
-    executable = application.executableURL()
-    exe = str(executable.path() or "") if executable is not None else ""
-    launch = application.launchDate()
-    if launch is None or not (exe or bundle):
-        # Without a launch time, a reused PID cannot be safely distinguished.
-        raise NativeError("target_identity_unavailable")
-    return {"pid": pid, "exe": exe or bundle, "process_start_time": float(launch.timeIntervalSince1970()),
-            "class_name": bundle, "bundle_identifier": bundle}
-
-
-def window_identity(hwnd: int) -> dict[str, Any]:
+def get_display_geometry(display_id: int) -> dict[str, Any]:
+    """Return global logical points and the current backing display mode."""
     _require_frameworks()
     with objc.autorelease_pool():
-        row, _ = _window_row(hwnd)
-        pid = _owner_pid(row)
-        identity = {"hwnd": _window_id(row), **_process_identity(pid)}
-        latest, _ = _window_row(hwnd)
-        if _owner_pid(latest) != pid:
-            raise NativeError("target_identity_changed")
-        return identity
+        return _display_geometry(int(display_id), int(Quartz.CGMainDisplayID()))
 
 
-def get_window_geometry(hwnd: int, *, include_title: bool = False) -> dict[str, Any]:
+def list_displays() -> list[dict[str, Any]]:
+    """Return active displays, with the primary display first."""
     _require_frameworks()
     with objc.autorelease_pool():
-        row, onscreen = _window_row(hwnd)
-        return _geometry(row, onscreen, include_title)
-
-
-def get_window_info(hwnd: int) -> dict[str, Any]:
-    _require_frameworks()
-    with objc.autorelease_pool():
-        row, onscreen = _window_row(hwnd)
-        return {**_geometry(row, onscreen, True), **_process_identity(_owner_pid(row))}
-
-
-def list_windows(exclude_own_process: bool = True) -> list[dict[str, Any]]:
-    """Return visible normal windows even when Quartz withholds their titles."""
-    _require_frameworks()
-    windows = []
-    identities = {}
-    with objc.autorelease_pool():
-        for row in _window_rows(onscreen=True):
-            pid = _owner_pid(row)
-            if (exclude_own_process and pid == os.getpid()) or not _normal(row) or not _visible(row, True):
-                continue
+        error, display_ids, count = Quartz.CGGetActiveDisplayList(64, None, None)
+        if error != Quartz.kCGErrorSuccess:
+            raise NativeError(f"无法列出当前显示器（{error}）。")
+        main_id = int(Quartz.CGMainDisplayID())
+        displays = []
+        for display_id in (display_ids or ())[:count]:
             try:
-                window = _geometry(row, True, True)
+                displays.append(_display_geometry(int(display_id), main_id))
             except NativeError:
+                # Displays can disconnect while the list is being prepared.
                 continue
-            if min(window["client_size"]) <= 0:
-                continue
-            if pid not in identities:
-                try:
-                    identities[pid] = _process_identity(pid)
-                except NativeError:
-                    identities[pid] = None
-            process = identities[pid]
-            if process is None:
-                window.update(exe=None, process_start_time=None, class_name="", identity_available=False)
-            else:
-                window.update(process, identity_available=True)
-            windows.append(window)
-    return sorted(windows, key=lambda row: (row["title"].casefold(), row["hwnd"]))
+    return sorted(displays, key=lambda display: (not display["is_main"], display["display_id"]))
 
 
-def _validate_row(identity, row, onscreen: bool, require_visible: bool) -> tuple[bool, str]:
-    pid = _owner_pid(row)
-    if pid != identity.get("pid"):
-        return False, "target_identity_changed"
-    current = _process_identity(pid)
-    if any(current[key] != identity.get(key) for key in ("process_start_time", "exe", "class_name")):
-        return False, "target_identity_changed"
-    if require_visible:
-        if not _visible(row, onscreen) or not _normal(row):
-            return False, "target_hidden"
-        left, top, right, bottom = _window_rect(row)
-        if min(right - left, bottom - top) <= 0:
-            return False, "target_empty_client"
-    return True, "ok"
-
-
-def validate_target(identity: dict[str, Any], require_visible: bool = True) -> tuple[bool, str]:
-    try:
-        _require_frameworks()
-        with objc.autorelease_pool():
-            row, onscreen = _window_row(identity["hwnd"])
-            return _validate_row(identity, row, onscreen, require_visible)
-    except (NativeError, OSError, KeyError, TypeError, ValueError, OverflowError) as error:
-        return False, str(error)
-
-
-def foreground_belongs_to_target(identity: dict[str, Any], allowed_hwnds: Iterable[int] = (),
-                                 allow_same_process: bool = False) -> bool:
-    """Use the frontmost app and its topmost normal window in Quartz order."""
-    try:
-        _require_frameworks()
-        with objc.autorelease_pool():
-            rows = _window_rows(onscreen=True)
-            hwnd = int(identity["hwnd"])
-            target = _find_row(hwnd, rows)
-            if target is None or not _validate_row(identity, target, True, True)[0]:
-                return False
-            application = AppKit.NSWorkspace.sharedWorkspace().frontmostApplication()
-            if application is None:
-                return False
-            pid = int(application.processIdentifier())
-            if pid == os.getpid():
-                # The assistant's Qt tool windows need not be at normal level.
-                key_window = AppKit.NSApplication.sharedApplication().keyWindow()
-                foreground = int(key_window.windowNumber()) if key_window is not None else 0
-            else:
-                topmost = next((row for row in rows if _owner_pid(row) == pid
-                                and _normal(row) and _visible(row, True)), None)
-                foreground = _window_id(topmost) if topmost is not None else 0
-            return foreground > 0 and (foreground == hwnd or foreground in allowed_hwnds
-                                       or (allow_same_process and pid == identity["pid"]))
-    except (NativeError, OSError, KeyError, TypeError, ValueError, OverflowError):
-        return False
+def foreground_process_id() -> int:
+    """Return the current foreground app's PID, or zero when unavailable."""
+    if AppKit is None or objc is None:
+        return 0
+    with objc.autorelease_pool():
+        application = AppKit.NSWorkspace.sharedWorkspace().frontmostApplication()
+        return max(0, int(application.processIdentifier())) if application is not None else 0
 
 
 def _own_window(view_id: int):
@@ -254,14 +119,6 @@ def _own_window(view_id: int):
                 return window
             pending.extend(view.subviews())
     return None
-
-
-def own_window_number(view_id: int) -> int:
-    """Convert a top-level Qt winId() into a Quartz window ID on the UI thread."""
-    _require_frameworks()
-    with objc.autorelease_pool():
-        window = _own_window(view_id)
-        return max(0, int(window.windowNumber())) if window is not None else 0
 
 
 def configure_overlay(view_id: int, click_through: bool = True) -> dict[str, Any]:

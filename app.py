@@ -1,10 +1,11 @@
-"""Gugugu: local pixels, independent windows, no game input."""
+"""Gugugu: local pixels and reminders, no game input."""
 from __future__ import annotations
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import json
 import logging
+import os
 from pathlib import Path
 import sys
 import time
@@ -12,7 +13,7 @@ import time
 IS_MACOS = sys.platform == "darwin"
 if IS_MACOS:
     import mac_native as native
-    from mac_capture import WindowCapture
+    from mac_capture import DisplayCapture
 else:
     import native
     from vision import WindowCapture
@@ -45,6 +46,11 @@ DEFAULT_DATA_DIR = (Path.home() / "Library" / "Application Support" / "Gugugu"
 
 def is_official_target(target):
     return Path((target or {}).get("exe", "")).name.casefold() == "arknights.exe"
+
+
+def _display_context(geometry, pid):
+    return (pid, tuple(geometry["client_screen_rect"]), geometry.get("display_pixel_size"),
+            geometry.get("display_rotation"), geometry.get("profile_id"))
 
 STYLE = """
 QWidget { background:#101813; color:#e7f0e9; font:14px 'Microsoft YaHei UI'; }
@@ -92,7 +98,7 @@ class ReminderOverlay(QWidget):
             return
         left, top, right, bottom = rectangle
         if IS_MACOS:
-            # Quartz window bounds and Qt desktop geometry both use points.
+            # The display rectangle is in global points, independent of capture pixels.
             self.setGeometry(left, top, right-left, bottom-top)
         if not self.isVisible():
             self.show()
@@ -144,6 +150,12 @@ class Controller(QWidget):
         self.capture_running = False
         self.target = None
         self.profile = None
+        if IS_MACOS:
+            self.mac_capture_allowed = False
+            self.pending_display = None
+            self.display_switch_pending = False
+            self.display_context = None
+            self.engine_display_context = None
         self.engine = None
         self.engine_threads = None
         self.engine_official_mode = None
@@ -204,24 +216,29 @@ class Controller(QWidget):
         self.body = QWidget()
         body = QVBoxLayout(self.body)
         body.setContentsMargins(0, 0, 0, 0)
-        body.addWidget(QLabel("游戏 / 网页所在窗口"))
-        window_row = QHBoxLayout()
-        self.windows = QComboBox()
-        self.windows.setMinimumContentsLength(15)
-        self.windows.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-        window_row.addWidget(self.windows, 1)
-        refresh = QPushButton("刷新")
-        refresh.clicked.connect(self.refresh_windows)
-        window_row.addWidget(refresh)
-        body.addLayout(window_row)
+        body.addWidget(QLabel("游戏 / 网页所在显示器" if IS_MACOS else "游戏 / 网页所在窗口"))
+        source_row = QHBoxLayout()
+        source_picker = QComboBox()
+        source_picker.setMinimumContentsLength(15)
+        source_picker.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        source_row.addWidget(source_picker, 1)
+        refresh = QPushButton("刷新显示器" if IS_MACOS else "刷新")
+        source_row.addWidget(refresh)
+        body.addLayout(source_row)
         if IS_MACOS:
+            self.displays = source_picker
+            self.displays.currentIndexChanged.connect(self.select_display)
+            refresh.clicked.connect(self.refresh_displays)
             self.permission_button = QPushButton("授权屏幕录制")
             self.permission_button.clicked.connect(self.request_mac_capture_permission)
             body.addWidget(self.permission_button)
-        bind = QPushButton("绑定所选窗口")
-        bind.clicked.connect(self.bind_selected)
-        body.addWidget(bind)
-        self.calibration_status = QLabel("首次使用先绑定窗口，再框选商店。" if IS_MACOS
+        else:
+            self.windows = source_picker
+            refresh.clicked.connect(self.refresh_windows)
+            bind = QPushButton("绑定所选窗口")
+            bind.clicked.connect(self.bind_selected)
+            body.addWidget(bind)
+        self.calibration_status = QLabel("默认使用主显示器。展开商店后，首次使用请手动框选。" if IS_MACOS
                                           else "首次使用先绑定窗口。网页商店需要手动框选。")
         self.calibration_status.setWordWrap(True)
         body.addWidget(self.calibration_status)
@@ -268,7 +285,8 @@ class Controller(QWidget):
         self.power.setObjectName("primary")
         self.power.clicked.connect(self.toggle_scan)
         self.layout.addWidget(self.power)
-        self.details = QLabel("只读取所选窗口画面，不自动点击游戏。")
+        self.details = QLabel("在本机捕获所选显示器画面，仅识别框选范围。" if IS_MACOS
+                              else "只读取所选窗口画面，不自动点击游戏。")
         self.details.setWordWrap(True)
         self.layout.addWidget(self.details)
         self.timer = QTimer(self)
@@ -276,7 +294,10 @@ class Controller(QWidget):
         self.timer.timeout.connect(self.tick)
         self.timer.start()
         self.refresh_presets()
-        self.refresh_windows()
+        if IS_MACOS:
+            self.refresh_displays()
+        else:
+            self.refresh_windows()
         if self.settings_warnings:
             logging.warning("Performance settings: %s", self.settings_warnings)
             self.set_status("线程设置无法读取，已使用 2 线程；重新选择可保存。")
@@ -334,12 +355,6 @@ class Controller(QWidget):
         current = self.windows.currentData()
         self.windows.clear()
         try:
-            if IS_MACOS:
-                allowed = native.has_capture_permission()
-                self.permission_button.setVisible(not allowed)
-                if not allowed:
-                    self.set_status("请先点「授权屏幕录制」，授权后重新打开咕顾谷。")
-                    return
             available = native.list_windows()
         except Exception as error:
             self.set_status("无法列出窗口：" + str(error))
@@ -353,11 +368,88 @@ class Controller(QWidget):
         if not self.windows.count():
             self.set_status("未找到可见窗口，请打开游戏或网页后点刷新。")
 
+    def refresh_displays(self):
+        current = self.displays.currentData()
+        try:
+            self.mac_capture_allowed = native.has_capture_permission()
+            available = native.list_displays()
+        except Exception as error:
+            self.update_display_controls()
+            self.set_status(f"无法列出显示器：{error}")
+            return
+        self.permission_button.setVisible(not self.mac_capture_allowed)
+        if not self.mac_capture_allowed and self.scanning:
+            self.stop_scan()
+        self.displays.blockSignals(True)
+        self.displays.clear()
+        for display in available:
+            self.displays.addItem(display["title"], display)
+        current_id = current.get("display_id") if current else None
+        default = next((i for i, display in enumerate(available) if display.get("is_main")), 0)
+        index = next((i for i, display in enumerate(available) if display["display_id"] == current_id), default)
+        self.displays.setCurrentIndex(index if available else -1)
+        self.displays.blockSignals(False)
+        self.select_display(self.displays.currentIndex())
+        if not self.mac_capture_allowed:
+            self.set_status("请点「授权屏幕录制」，授权后重新打开咕顾谷。")
+        elif not available:
+            self.set_status("未找到可用显示器，请连接显示器后刷新。")
+
+    def select_display(self, index):
+        display = self.displays.itemData(index) if index >= 0 else None
+        if not self.display_switch_pending:
+            if display is None and self.target is None:
+                self.update_display_controls()
+                return
+            if (display and self.target and display["display_id"] == self.target["display_id"]
+                    and str(display["profile_id"]) == self.target["class_name"]):
+                self.update_display_controls()
+                return
+        self.pending_display = display
+        self.display_switch_pending = True
+        self.calibration_requested = False
+        self.stop_scan()
+        self.finish_display_switch()
+        if self.display_switch_pending:
+            self.set_status("正在结束当前识别，随后切换显示器……")
+        self.update_display_controls()
+
+    def finish_display_switch(self):
+        if not self.display_switch_pending or self.future:
+            return
+        self.request_capture_stop()
+        if self.future:
+            return
+        display, self.pending_display = self.pending_display, None
+        self.display_switch_pending = False
+        self.display_context = None
+        self.capture = self.target = self.profile = None
+        if display:
+            self.capture = DisplayCapture(int(display["display_id"]))
+            self.target = {"display_id": display["display_id"], "title": display["title"],
+                           "exe": "macos-display", "class_name": str(display["profile_id"])}
+            try:
+                self.profile = load_profiles(self.calibration_path)["profiles"].get(profile_key(self.target))
+            except (ValueError, OSError) as error:
+                self.set_status(str(error))
+            range_status = ("已载入此显示器的商店范围。" if self.profile
+                            else "请展开商店，再手动框选整排卡片。")
+            self.calibration_status.setText(f"{display['title']}\n{range_status}")
+        else:
+            self.calibration_status.setText("没有可用显示器。")
+        self.update_display_controls()
+
+    def update_display_controls(self):
+        available = self.mac_capture_allowed and self.capture is not None and not self.display_switch_pending
+        self.calibrate_button.setEnabled(available)
+        self.power.setEnabled(available and self.profile is not None)
+
     def request_mac_capture_permission(self):
         try:
             if native.has_capture_permission() or native.request_capture_permission():
-                self.set_status("屏幕录制已授权，请选择并绑定窗口。")
-                self.refresh_windows()
+                self.refresh_displays()
+                if self.mac_capture_allowed and self.target:
+                    self.set_status("屏幕录制已授权。请在所选显示器上展开商店后框选。")
             else:
                 self.set_status("请在系统设置中允许屏幕录制，再重新打开咕顾谷。")
         except Exception as error:
@@ -388,17 +480,13 @@ class Controller(QWidget):
         except Exception:
             window_info = {}
             self.target["title"] = "所选窗口"
-        if IS_MACOS:
-            self.capture = WindowCapture(int(hwnd), identity=self.target)
-        else:
-            self.capture = WindowCapture(int(hwnd))
+        self.capture = WindowCapture(int(hwnd))
         try:
             self.profile = load_profiles(self.calibration_path)["profiles"].get(profile_key(self.target))
         except (ValueError, OSError) as error:
             self.profile = None
             self.set_status(str(error))
-        if (not IS_MACOS and self.profile is None and is_official_target(self.target)
-                and window_info.get("client_screen_rect")):
+        if (self.profile is None and is_official_target(self.target) and window_info.get("client_screen_rect")):
             left, top, right, bottom = window_info["client_screen_rect"]
             self.profile = {"roi": [0.0, .73, 1.0, 1.0], "reference_size": [right-left, bottom-top],
                             "auto_official": True}
@@ -415,10 +503,13 @@ class Controller(QWidget):
         if self.closing:
             raise RuntimeError("程序正在关闭。")
         if not self.capture:
-            raise RuntimeError("请先绑定窗口。")
+            raise RuntimeError("未找到可用显示器，请刷新显示器。" if IS_MACOS else "请先绑定窗口。")
         self.capture.start()
         self.capture_running = True
         deadline = time.monotonic() + 5
+        retryable = ("no_frame", "starting", "frame_unavailable", "capture_starting", "frame_pending", "window_resizing")
+        if IS_MACOS:
+            retryable += ("display_reconfiguring", "capture_timeout")
         while True:
             if self.closing:
                 self.capture.stop()
@@ -429,7 +520,7 @@ class Controller(QWidget):
                 if error.code == "frame_stale" and time.monotonic() < deadline:
                     self.capture.stop()
                     self.capture.start()
-                elif error.code not in ("no_frame", "starting", "frame_unavailable", "capture_starting", "frame_pending", "window_resizing") or time.monotonic() >= deadline:
+                elif error.code not in retryable or time.monotonic() >= deadline:
                     raise
                 time.sleep(.06)
 
@@ -443,15 +534,21 @@ class Controller(QWidget):
         return True
 
     def calibrate(self):
+        if IS_MACOS and not self.mac_capture_allowed:
+            self.set_status("请先授权屏幕录制。")
+            return
+        if IS_MACOS and self.display_switch_pending:
+            self.set_status("显示器正在切换，请稍后框选商店。")
+            return
         if not self.capture:
-            self.set_status("请先绑定游戏 / 网页窗口。")
+            self.set_status("未找到可用显示器，请刷新显示器。" if IS_MACOS else "请先绑定游戏 / 网页窗口。")
             return
         self.stop_scan()
         if self.future:
             self.calibration_requested = True
             self.set_status("正在结束本轮识别，随后打开校准画面……")
             return
-        self.set_status("正在获取所选窗口画面……")
+        self.set_status("正在获取所选显示器画面……" if IS_MACOS else "正在获取所选窗口画面……")
         self.submit("calibration", self.calibration_frame)
 
     def stop_capture_worker(self, capture):
@@ -474,13 +571,17 @@ class Controller(QWidget):
 
     def apply_calibration(self, roi, size):
         if not self.target:
-            raise ValueError("请先绑定窗口。")
+            raise ValueError("未找到可用显示器，请刷新显示器。" if IS_MACOS else "请先绑定窗口。")
         profile = save_profile(self.calibration_path, self.target, roi, size)
         self.profile = profile
         if self.engine is not None:
             self.engine.reset_layout()
         self.invalidate()
-        self.calibration_status.setText("商店范围已保存。窗口移动和等比例缩放时自动跟随。")
+        if IS_MACOS:
+            self.calibration_status.setText(f"{self.target['title']}\n商店范围已保存。商店位置或大小变化后请重新框选。")
+            self.update_display_controls()
+        else:
+            self.calibration_status.setText("商店范围已保存。窗口移动和等比例缩放时自动跟随。")
 
     def refresh_presets(self):
         self.presets.blockSignals(True)
@@ -540,7 +641,7 @@ class Controller(QWidget):
     def open_tutorial(self):
         if self.tutorial_dialog is None:
             from tutorial import TutorialDialog
-            self.tutorial_dialog = TutorialDialog(self, RESOURCE_ROOT)
+            self.tutorial_dialog = TutorialDialog(self, RESOURCE_ROOT, macos=IS_MACOS)
             self.tutorial_dialog.setWindowOpacity(self.window_opacities["tutorial"] / 100)
         self.tutorial_dialog.show()
         self.tutorial_dialog.raise_()
@@ -602,8 +703,14 @@ class Controller(QWidget):
 
     def start_scan(self):
         self.calibration_requested = False
+        if IS_MACOS and not self.mac_capture_allowed:
+            self.set_status("请先授权屏幕录制。")
+            return False
+        if IS_MACOS and self.display_switch_pending:
+            self.set_status("显示器正在切换，请稍后开启扫描。")
+            return False
         if not self.target or not self.profile:
-            self.set_status("请先绑定窗口并框选商店。")
+            self.set_status("请在所选显示器上展开并框选商店。" if IS_MACOS else "请先绑定窗口并框选商店。")
             return False
         self.invalidate()
         self.scanning = True
@@ -623,6 +730,12 @@ class Controller(QWidget):
 
     def toggle_scan(self):
         self.stop_scan() if self.scanning else self.start_scan()
+
+    @staticmethod
+    def check_display_frame(frame, expected):
+        context = _display_context(frame.geometry, frame.geometry.get("foreground_pid"))
+        if context != expected:
+            raise CaptureUnavailable("display_reconfiguring", "前台应用或显示器已变化，正在等待新画面。")
 
     def recognize(self):
         job_started = time.perf_counter()
@@ -645,10 +758,11 @@ class Controller(QWidget):
                            "ocr_reused": result.get("ocr_reused", False)})
 
         profile = self.profile.copy()
+        display_context = self.display_context if IS_MACOS else None
         requested_threads = self.requested_threads
         official_mode = None
         if IS_MACOS:
-            # Detect official cards by their pixels, including emulator windows.
+            # Detect official cards by their pixels, regardless of launcher.
             official_mode = "manual"
         elif is_official_target(self.target):
             official_mode = "auto" if profile.get("auto_official") else "manual"
@@ -675,19 +789,27 @@ class Controller(QWidget):
             except Exception as error:
                 raise RecognitionPreparationError(f"无法应用 {requested_threads} 线程，请调整后重新开启扫描：{error}") from error
             preparation_ms = (time.perf_counter()-preparation_started)*1000
+        if IS_MACOS and self.engine_display_context != display_context:
+            self.engine.reset_layout()
+            self.engine_display_context = display_context
         # Get the source AFTER cold model load, so initialization does not age it.
         capture_started = time.perf_counter()
         frame = self.get_frame()
+        if IS_MACOS:
+            self.check_display_frame(frame, display_context)
         capture_wait_ms = (time.perf_counter()-capture_started)*1000
         height, width = frame.image_bgr.shape[:2]
         if not profile_matches(profile, width, height):
-            raise RuntimeError("窗口比例已变化，请重新框选商店。")
+            raise RuntimeError("显示器比例已变化，请重新框选商店。" if IS_MACOS
+                               else "窗口比例已变化，请重新框选商店。")
         observation = self.engine.analyze(frame.image_bgr, profile["roi"], sequence=frame.sequence, timestamp=frame.timestamp)
         record_pass("source", observation)
         observation["frame_stable"] = None
         if observation.get("candidates"):
             try:
                 latest = self.capture.latest_frame(max_age_ms=1500)
+                if IS_MACOS:
+                    self.check_display_frame(latest, display_context)
                 stable = name_frames_stable(frame, latest, name_verification_regions(observation))
                 observation["frame_stable"] = stable
                 if stable is False:
@@ -702,6 +824,8 @@ class Controller(QWidget):
                     current["elapsed_ms"] += observation["elapsed_ms"]
                     if current["candidates"]:
                         after = self.capture.latest_frame(max_age_ms=1500)
+                        if IS_MACOS:
+                            self.check_display_frame(after, display_context)
                         after_stable = name_frames_stable(latest, after, name_verification_regions(current))
                         current["frame_stable"] = after_stable
                         if after_stable is False:
@@ -721,8 +845,11 @@ class Controller(QWidget):
                     observation = current
             except CaptureUnavailable:
                 observation["status"] = "frame_stale"
-                observation["error"] = "窗口画面不可用，等待新画面。"
+                observation["error"] = ("显示器画面不可用，等待新画面。" if IS_MACOS
+                                        else "窗口画面不可用，等待新画面。")
                 observation["candidates"] = []
+        if IS_MACOS:
+            observation["display_context"] = display_context
         observation["recognition_passes"] = passes
         observation["model_preparation_ms"] = preparation_ms
         observation["capture_wait_ms"] = capture_wait_ms
@@ -773,7 +900,8 @@ class Controller(QWidget):
                 continue
             record = records[0]
             resolved.append({**candidate, **record})
-        context = (self.target.get("hwnd") if self.target else None,
+        source_id = "display_id" if IS_MACOS else "hwnd"
+        context = (self.target.get(source_id) if self.target else None,
                    tuple(self.profile.get("roi", [])) if self.profile else ())
         diagnostics = observation.get("diagnostics", {})
         if diagnostics.get("geometry_source") == "borders":
@@ -830,10 +958,32 @@ class Controller(QWidget):
             self.last_good = 0
             self.overlay.clear()
 
+    def read_display_context(self):
+        geometry = native.get_display_geometry(self.target["display_id"])
+        if str(geometry["profile_id"]) != self.target["class_name"]:
+            raise native.NativeError("显示器已更换，请刷新后重新选择。")
+        context = _display_context(geometry, native.foreground_process_id())
+        if context != self.display_context:
+            self.display_context = context
+            self.invalidate()
+            self.last_submit = 0
+            self.details.setText("等待所选显示器的商店画面。")
+        return context
+
     def tick(self):
         if self.closing:
             return
         self.expire_uncertain()
+        display_context = None
+        if IS_MACOS and self.scanning and self.target:
+            try:
+                display_context = self.read_display_context()
+            except Exception as error:
+                if self.display_context is not None:
+                    self.display_context = None
+                    self.invalidate()
+                self.overlay.clear()
+                self.set_status(f"当前显示器不可用，请刷新显示器：{error}")
         if self.future and self.future.done():
             future, kind, generation = self.future, self.job_kind, self.job_generation
             self.future, self.job_kind = None, None
@@ -849,7 +999,12 @@ class Controller(QWidget):
                         else:
                             self.set_status("已取消框选，原保存范围保留。")
                     elif kind == "recognition" and self.scanning:
-                        self.accept_observation(result)
+                        if not IS_MACOS or (display_context and display_context[0]
+                                            and display_context[0] != os.getpid()
+                                            and result.get("display_context") == display_context):
+                            self.accept_observation(result)
+                        else:
+                            self.invalidate()
             except Exception as error:
                 logging.exception("Background operation failed")
                 if generation == self.generation:
@@ -864,28 +1019,41 @@ class Controller(QWidget):
             if self.calibration_requested and not self.closing:
                 self.calibration_requested = False
                 QTimer.singleShot(0, self.calibrate)
+        if IS_MACOS and self.display_switch_pending:
+            self.finish_display_switch()
         if not self.scanning or not self.target:
             self.overlay.clear()
             return
         try:
-            valid, reason = native.validate_target(self.target)
-            if not valid:
-                self.overlay.clear()
-                self.previous_keys.clear()
-                self.matches = []
-                self.set_status(reason)
-                return
-            geometry = native.get_window_geometry(self.target["hwnd"])
-            rect = geometry["client_screen_rect"]
+            if IS_MACOS:
+                if display_context is None:
+                    return
+                pid, rect = display_context[:2]
+                if not pid or pid == os.getpid():
+                    self.overlay.clear()
+                    self.set_status("扫描已开启 · 切回游戏或网页后继续。")
+                    return
+                front = True
+            else:
+                valid, reason = native.validate_target(self.target)
+                if not valid:
+                    self.overlay.clear()
+                    self.previous_keys.clear()
+                    self.matches = []
+                    self.set_status(reason)
+                    return
+                geometry = native.get_window_geometry(self.target["hwnd"])
+                rect = geometry["client_screen_rect"]
             if not profile_matches(self.profile, rect[2]-rect[0], rect[3]-rect[1]):
                 self.overlay.clear()
                 self.previous_keys.clear()
                 self.matches = []
-                self.set_status("窗口比例已变化，请重新框选商店。")
+                self.set_status("显示器比例已变化，请重新框选商店。" if IS_MACOS
+                                else "窗口比例已变化，请重新框选商店。")
                 return
-            allowed_windows = () if IS_MACOS else (int(self.winId()),)
-            front = native.foreground_belongs_to_target(self.target, allowed_hwnds=allowed_windows,
-                                                        allow_same_process=False)
+            if not IS_MACOS:
+                front = native.foreground_belongs_to_target(self.target, allowed_hwnds=(int(self.winId()),),
+                                                            allow_same_process=False)
             fresh = self.last_good and time.monotonic()-self.last_good < 3.5
             if front and fresh and self.store.state["enabled"]:
                 self.overlay.present(rect, self.matches)
