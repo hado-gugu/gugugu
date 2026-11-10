@@ -1,0 +1,54 @@
+name: Build the standalone macOS screen capture check
+
+on:
+  push:
+    branches: [build/macos-capture-check]
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build the standalone Apple Silicon app
+        shell: bash
+        run: bash tools/mac-capture-check/build.sh "$RUNNER_TEMP/capture-check"
+      - name: Verify the app without requesting screen capture
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/capture-check/GuguguCaptureCheck.app"
+          binary="$app/Contents/MacOS/GuguguCaptureCheck"
+          plist="$app/Contents/Info.plist"
+          test "$(lipo -archs "$binary")" = arm64
+          test "$(plutil -extract CFBundleIdentifier raw "$plist")" = com.haoxindegezi.gugugu.capturecheck
+          test "$(plutil -extract LSMinimumSystemVersion raw "$plist")" = 14.4
+          test -n "$(plutil -extract NSScreenCaptureUsageDescription raw "$plist")"
+          codesign --verify --deep --strict "$app"
+          "$binary" --smoke-test | grep -Fx 'GuguguCaptureCheck smoke test passed'
+      - name: Create the standalone detector ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="$RUNNER_TEMP/capture-check-package"
+          archive="$RUNNER_TEMP/GuguguCaptureCheck-macOS-arm64.zip"
+          mkdir "$package"
+          ditto "$RUNNER_TEMP/capture-check/GuguguCaptureCheck.app" "$package/GuguguCaptureCheck.app"
+          cp '使用前请先阅读.txt' "$package/使用前请先阅读.txt"
+          cmp '使用前请先阅读.txt' "$package/使用前请先阅读.txt"
+          cp LICENSE.txt "$package/LICENSE.txt"
+          ditto -c -k "$package" "$archive"
+          unzip -tq "$archive"
+          shasum -a 256 "$archive"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GuguguCaptureCheck-macOS-arm64
+          path: ${{ runner.temp }}/GuguguCaptureCheck-macOS-arm64.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
