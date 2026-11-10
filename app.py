@@ -42,6 +42,8 @@ RESOURCE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 APP_ROOT = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 DEFAULT_DATA_DIR = (Path.home() / "Library" / "Application Support" / "Gugugu"
                     if IS_MACOS else APP_ROOT / "data")
+MAC_CAPTURE_SETTINGS = ("请在「系统设置 → 隐私与安全性 → 屏幕与系统音频录制」（旧版为「屏幕录制」）中开启权限。"
+                        "授权后请完全退出并重新打开咕顾谷，再点「检测录屏」。")
 
 
 def is_official_target(target):
@@ -152,6 +154,9 @@ class Controller(QWidget):
         self.profile = None
         if IS_MACOS:
             self.mac_capture_allowed = False
+            self.mac_capture_verified = False
+            self.mac_capture_denied = False
+            self.capture_probe_requested = False
             self.pending_display = None
             self.display_switch_pending = False
             self.display_context = None
@@ -231,7 +236,13 @@ class Controller(QWidget):
             refresh.clicked.connect(self.refresh_displays)
             self.permission_button = QPushButton("授权屏幕录制")
             self.permission_button.clicked.connect(self.request_mac_capture_permission)
-            body.addWidget(self.permission_button)
+            self.capture_probe_button = QPushButton("检测录屏")
+            self.capture_probe_button.setToolTip("读取一帧所选显示器画面，确认系统是否能取图。画面只在内存中使用。")
+            self.capture_probe_button.clicked.connect(self.diagnose_capture)
+            permission_row = QHBoxLayout()
+            permission_row.addWidget(self.permission_button, 1)
+            permission_row.addWidget(self.capture_probe_button, 1)
+            body.addLayout(permission_row)
         else:
             self.windows = source_picker
             refresh.clicked.connect(self.refresh_windows)
@@ -372,14 +383,15 @@ class Controller(QWidget):
         current = self.displays.currentData()
         try:
             self.mac_capture_allowed = native.has_capture_permission()
+        except Exception as error:
+            self.mac_capture_allowed = False
+            logging.warning("macOS capture permission preflight failed: %s", error)
+        try:
             available = native.list_displays()
         except Exception as error:
             self.update_display_controls()
             self.set_status(f"无法列出显示器：{error}")
             return
-        self.permission_button.setVisible(not self.mac_capture_allowed)
-        if not self.mac_capture_allowed and self.scanning:
-            self.stop_scan()
         self.displays.blockSignals(True)
         self.displays.clear()
         for display in available:
@@ -390,10 +402,12 @@ class Controller(QWidget):
         self.displays.setCurrentIndex(index if available else -1)
         self.displays.blockSignals(False)
         self.select_display(self.displays.currentIndex())
-        if not self.mac_capture_allowed:
-            self.set_status("请点「授权屏幕录制」，授权后重新打开咕顾谷。")
-        elif not available:
+        if not available:
             self.set_status("未找到可用显示器，请连接显示器后刷新。")
+        elif self.mac_capture_denied:
+            self.set_status(f"macOS 拒绝了录屏请求。{MAC_CAPTURE_SETTINGS}")
+        elif not (self.mac_capture_allowed or self.mac_capture_verified):
+            self.set_status("系统权限检查尚未确认授权。可点「授权屏幕录制」，也可点「检测录屏」检查取图。")
 
     def select_display(self, index):
         display = self.displays.itemData(index) if index >= 0 else None
@@ -408,6 +422,7 @@ class Controller(QWidget):
         self.pending_display = display
         self.display_switch_pending = True
         self.calibration_requested = False
+        self.capture_probe_requested = False
         self.stop_scan()
         self.finish_display_switch()
         if self.display_switch_pending:
@@ -440,20 +455,55 @@ class Controller(QWidget):
         self.update_display_controls()
 
     def update_display_controls(self):
-        available = self.mac_capture_allowed and self.capture is not None and not self.display_switch_pending
+        self.permission_button.setVisible(self.mac_capture_denied or
+                                          not (self.mac_capture_allowed or self.mac_capture_verified))
+        probing = self.capture_probe_requested or self.job_kind == "capture_probe"
+        available = self.capture is not None and not self.display_switch_pending and not probing
+        self.capture_probe_button.setEnabled(available)
         self.calibrate_button.setEnabled(available)
         self.power.setEnabled(available and self.profile is not None)
 
     def request_mac_capture_permission(self):
         try:
-            if native.has_capture_permission() or native.request_capture_permission():
-                self.refresh_displays()
-                if self.mac_capture_allowed and self.target:
-                    self.set_status("屏幕录制已授权。请在所选显示器上展开商店后框选。")
+            if native.request_capture_permission():
+                self.mac_capture_allowed = True
+                self.set_status("系统权限检查已通过。若刚授权，请完全退出并重新打开咕顾谷，再点「检测录屏」。")
             else:
-                self.set_status("请在系统设置中允许屏幕录制，再重新打开咕顾谷。")
+                self.mac_capture_allowed = False
+                self.set_status(f"系统权限检查尚未确认授权。{MAC_CAPTURE_SETTINGS}")
+            self.update_display_controls()
         except Exception as error:
             self.set_status("无法请求屏幕录制权限：" + str(error))
+
+    def diagnose_capture(self):
+        if not self.capture or self.display_switch_pending:
+            self.set_status("未找到可用显示器，请刷新显示器。")
+            return
+        self.calibration_requested = False
+        self.stop_scan()
+        if self.future:
+            self.capture_probe_requested = True
+            self.set_status("正在结束当前操作，随后检测录屏……")
+        else:
+            self.capture_probe_requested = False
+            self.set_status("正在读取一帧所选显示器画面，检测录屏……")
+            self.submit("capture_probe", self.probe_capture)
+        self.update_display_controls()
+
+    def probe_capture(self):
+        capture = self.capture
+        try:
+            frame = self.get_frame()
+            height, width = frame.image_bgr.shape[:2]
+            return width, height
+        finally:
+            self.stop_capture_worker(capture)
+
+    def confirm_mac_capture(self):
+        if not self.mac_capture_verified or self.mac_capture_denied:
+            self.mac_capture_verified = True
+            self.mac_capture_denied = False
+            self.update_display_controls()
 
     def bind_selected(self):
         hwnd = self.windows.currentData()
@@ -534,11 +584,11 @@ class Controller(QWidget):
         return True
 
     def calibrate(self):
-        if IS_MACOS and not self.mac_capture_allowed:
-            self.set_status("请先授权屏幕录制。")
-            return
         if IS_MACOS and self.display_switch_pending:
             self.set_status("显示器正在切换，请稍后框选商店。")
+            return
+        if IS_MACOS and (self.capture_probe_requested or self.job_kind == "capture_probe"):
+            self.set_status("正在检测录屏，请稍后框选商店。")
             return
         if not self.capture:
             self.set_status("未找到可用显示器，请刷新显示器。" if IS_MACOS else "请先绑定游戏 / 网页窗口。")
@@ -703,11 +753,11 @@ class Controller(QWidget):
 
     def start_scan(self):
         self.calibration_requested = False
-        if IS_MACOS and not self.mac_capture_allowed:
-            self.set_status("请先授权屏幕录制。")
-            return False
         if IS_MACOS and self.display_switch_pending:
             self.set_status("显示器正在切换，请稍后开启扫描。")
+            return False
+        if IS_MACOS and (self.capture_probe_requested or self.job_kind == "capture_probe"):
+            self.set_status("正在检测录屏，请稍后开启扫描。")
             return False
         if not self.target or not self.profile:
             self.set_status("请在所选显示器上展开并框选商店。" if IS_MACOS else "请先绑定窗口并框选商店。")
@@ -843,7 +893,9 @@ class Controller(QWidget):
                             current["transient_uncertain"] = not changed_border
                             current["error"] = "名称暂时无法确认，正在核对最新画面……"
                     observation = current
-            except CaptureUnavailable:
+            except CaptureUnavailable as error:
+                if IS_MACOS and error.code == "permission_denied":
+                    raise
                 observation["status"] = "frame_stale"
                 observation["error"] = ("显示器画面不可用，等待新画面。" if IS_MACOS
                                         else "窗口画面不可用，等待新画面。")
@@ -991,6 +1043,8 @@ class Controller(QWidget):
                 result = future.result()
                 if generation == self.generation:
                     if kind == "calibration":
+                        if IS_MACOS:
+                            self.confirm_mac_capture()
                         roi = open_calibration(result.image_bgr, self.profile.get("roi") if self.profile else None,
                                                self, opacity=self.window_opacities["calibration"] / 100)
                         if roi:
@@ -998,22 +1052,42 @@ class Controller(QWidget):
                             self.set_status("范围已保存，可以开启扫描。")
                         else:
                             self.set_status("已取消框选，原保存范围保留。")
+                    elif kind == "capture_probe":
+                        self.confirm_mac_capture()
+                        width, height = result
+                        self.set_status(f"录屏正常 · 已取到 {width} × {height} 像素的画面。")
                     elif kind == "recognition" and self.scanning:
                         if not IS_MACOS or (display_context and display_context[0]
                                             and display_context[0] != os.getpid()
                                             and result.get("display_context") == display_context):
+                            if IS_MACOS:
+                                self.confirm_mac_capture()
                             self.accept_observation(result)
                         else:
                             self.invalidate()
             except Exception as error:
                 logging.exception("Background operation failed")
-                if generation == self.generation:
+                if IS_MACOS and isinstance(error, CaptureUnavailable) and error.code == "permission_denied":
+                    # The system prompt itself can change foreground focus while the capture is in flight.
+                    self.stop_scan()
+                    self.calibration_requested = False
+                    self.capture_probe_requested = False
+                    self.mac_capture_verified = False
+                    self.mac_capture_denied = True
+                    self.update_display_controls()
+                    self.set_status(f"macOS 拒绝了录屏请求。{MAC_CAPTURE_SETTINGS}")
+                elif generation == self.generation:
                     if isinstance(error, RecognitionPreparationError):
                         self.stop_scan()
                     self.previous_keys.clear()
                     self.matches = []
                     self.overlay.clear()
-                    self.set_status(str(error))
+                    if kind == "capture_probe":
+                        self.set_status(f"检测录屏失败：{error}")
+                    else:
+                        self.set_status(str(error))
+            if IS_MACOS and kind == "capture_probe":
+                self.update_display_controls()
             if not self.scanning:
                 self.request_capture_stop()
             if self.calibration_requested and not self.closing:
@@ -1021,6 +1095,8 @@ class Controller(QWidget):
                 QTimer.singleShot(0, self.calibrate)
         if IS_MACOS and self.display_switch_pending:
             self.finish_display_switch()
+        if IS_MACOS and self.capture_probe_requested and self.future is None:
+            self.diagnose_capture()
         if not self.scanning or not self.target:
             self.overlay.clear()
             return

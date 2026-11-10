@@ -60,7 +60,8 @@ from branding import APP_NAME, APP_VERSION
 path = Path(sys.argv[1])
 info = plistlib.loads(path.read_bytes())
 info.update(CFBundleDisplayName=APP_NAME, CFBundleShortVersionString=APP_VERSION,
-            CFBundleVersion=APP_VERSION)
+            CFBundleVersion=APP_VERSION,
+            NSScreenCaptureUsageDescription="咕顾谷读取你选定显示器上的卫戍协议商店画面，在本机识别并显示提醒。")
 path.write_bytes(plistlib.dumps(info, sort_keys=False))
 PY
 # PyInstaller signs the nested binaries. Refresh the outer seal after editing its plist.

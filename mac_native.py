@@ -23,7 +23,7 @@ def _require_frameworks() -> None:
 
 
 def has_capture_permission() -> bool:
-    """Check Screen Recording permission without requesting it."""
+    """Return the advisory Quartz preflight result without prompting."""
     preflight = getattr(Quartz, "CGPreflightScreenCaptureAccess", None)
     return bool(preflight and preflight())
 
@@ -31,7 +31,7 @@ def has_capture_permission() -> bool:
 def request_capture_permission() -> bool:
     """Request Screen Recording permission from an explicit UI action."""
     request = getattr(Quartz, "CGRequestScreenCaptureAccess", None)
-    return has_capture_permission() or bool(request and request())
+    return bool(request()) if request is not None else has_capture_permission()
 
 
 def _profile_id(display_id: int) -> str:

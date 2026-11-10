@@ -1,5 +1,6 @@
 """Exercise the macOS display path with fake framework calls and no live capture."""
 
+from concurrent.futures import Future
 from contextlib import ExitStack, nullcontext
 import os
 from pathlib import Path
@@ -26,6 +27,14 @@ def display(display_id=17, *, main=True):
 
 
 class DisplayMetadataTests(unittest.TestCase):
+    def test_explicit_permission_request_is_not_short_circuited_by_preflight(self):
+        quartz = Mock()
+        quartz.CGPreflightScreenCaptureAccess.return_value = True
+        quartz.CGRequestScreenCaptureAccess.return_value = False
+        with patch.object(mac_native, "Quartz", quartz):
+            self.assertFalse(mac_native.request_capture_permission())
+        quartz.CGRequestScreenCaptureAccess.assert_called_once_with()
+
     def test_primary_first_and_disconnected_displays_skipped(self):
         quartz = Mock(kCGErrorSuccess=0)
         quartz.CGGetActiveDisplayList.return_value = (0, (18, 17, 99), 3)
@@ -62,6 +71,8 @@ class DisplayCaptureTests(unittest.TestCase):
         self.pixels = np.zeros((6, 8, 3), dtype=np.uint8)
         self.to_bgr = patches.enter_context(patch.object(mac_capture, "_bgr_from_image", return_value=self.pixels))
         self.kit = Mock()
+        self.kit.SCStreamErrorDomain = "com.apple.ScreenCaptureKit.SCStreamErrorDomain"
+        self.kit.SCStreamErrorUserDeclined = -3801
         self.image = object()
         self.chosen_display = SimpleNamespace(displayID=lambda: 17)
         other_display = SimpleNamespace(displayID=lambda: 18)
@@ -100,13 +111,44 @@ class DisplayCaptureTests(unittest.TestCase):
         self.assertEqual(frame.geometry["capture_pixel_size"], (8, 6))
         self.assertEqual(frame.geometry["foreground_pid"], self.foreground_pid)
 
-    def test_missing_permission_stops_before_capture(self):
+    def test_false_quartz_preflight_does_not_block_explicit_capture(self):
         self.permission.return_value = False
+        capture = mac_capture.DisplayCapture(17)
+        capture.start()
+        self.addCleanup(capture.stop)
+
+        self.assertIs(capture.latest_frame().image_bgr, self.pixels)
+        self.permission.assert_not_called()
+
+    def test_screencapturekit_denial_during_display_enumeration(self):
+        error = SimpleNamespace(domain=lambda: self.kit.SCStreamErrorDomain,
+                                code=lambda: self.kit.SCStreamErrorUserDeclined,
+                                localizedDescription=lambda: "The user declined")
+        content = self.kit.SCShareableContent.getShareableContentExcludingDesktopWindows_onScreenWindowsOnly_completionHandler_
+        content.side_effect = lambda _desktop, _onscreen, done: done(None, error)
+        capture = mac_capture.DisplayCapture(17)
+        capture.start()
+        self.addCleanup(capture.stop)
         with self.assertRaises(CaptureUnavailable) as failure:
-            mac_capture.DisplayCapture(17).start()
+            capture.latest_frame()
 
         self.assertEqual(failure.exception.code, "permission_denied")
+        self.assertIn("-3801", " ".join(failure.exception.__notes__))
         self.take_picture.assert_not_called()
+
+    def test_unrelated_native_error_is_not_a_permission_denial(self):
+        error = SimpleNamespace(domain=lambda: "different.error.domain",
+                                code=lambda: self.kit.SCStreamErrorUserDeclined,
+                                localizedDescription=lambda: "Display unavailable")
+        self.take_picture.side_effect = lambda _filter, _config, done: done(None, error)
+        capture = mac_capture.DisplayCapture(17)
+        capture.start()
+        self.addCleanup(capture.stop)
+
+        with self.assertRaises(CaptureUnavailable) as failure:
+            capture.latest_frame()
+        self.assertEqual(failure.exception.code, "capture_error")
+        self.assertIn("different.error.domain", " ".join(failure.exception.__notes__))
 
     def test_foreground_change_discards_the_frame(self):
         capture = mac_capture.DisplayCapture(17)
@@ -155,7 +197,7 @@ class MacControllerStartupTests(unittest.TestCase):
         import app
 
         native = Mock()
-        native.has_capture_permission.return_value = True
+        native.has_capture_permission.return_value = False
         native.list_displays.return_value = [display(18, main=False), display()]
         native.get_display_geometry.return_value = display()
         native.list_windows.side_effect = AssertionError("macOS startup asked for game windows")
@@ -167,11 +209,78 @@ class MacControllerStartupTests(unittest.TestCase):
             try:
                 self.assertEqual(controller.target["display_id"], 17)
                 self.assertFalse(controller.scanning)
+                self.assertTrue(controller.calibrate_button.isEnabled())
+                self.assertTrue(controller.capture_probe_button.isEnabled())
                 native.list_windows.assert_not_called()
                 native.request_capture_permission.assert_not_called()
                 capture_factory.return_value.start.assert_not_called()
             finally:
                 controller.timer.stop()
+                controller.executor.shutdown(wait=True)
+                controller.overlay.deleteLater()
+                controller.deleteLater()
+
+    def test_explicit_probe_confirms_a_frame_without_starting_recognition(self):
+        import app
+
+        native = Mock()
+        native.has_capture_permission.return_value = False
+        native.list_displays.return_value = [display()]
+        capture_factory = Mock()
+        capture = capture_factory.return_value
+        capture.latest_frame.return_value = SimpleNamespace(image_bgr=np.zeros((6, 8, 3), dtype=np.uint8))
+
+        with tempfile.TemporaryDirectory() as folder, patch.object(app, "IS_MACOS", True), \
+                patch.object(app, "native", native), patch.object(app, "DisplayCapture", capture_factory, create=True):
+            controller = app.Controller(Path(folder))
+            try:
+                controller.timer.stop()
+                with patch.object(controller, "recognize") as recognize:
+                    controller.diagnose_capture()
+                    self.assertEqual(controller.future.result(timeout=2), (8, 6))
+                    controller.tick()
+                    recognize.assert_not_called()
+                self.assertTrue(controller.mac_capture_verified)
+                self.assertFalse(controller.scanning)
+                capture.latest_frame.assert_called_once()
+                capture.stop.assert_called_once()
+                native.request_capture_permission.assert_not_called()
+            finally:
+                controller.executor.shutdown(wait=True)
+                controller.overlay.deleteLater()
+                controller.deleteLater()
+
+    def test_native_denial_cancels_scan_and_queued_calibration(self):
+        import app
+
+        native = Mock()
+        native.has_capture_permission.return_value = True
+        native.list_displays.return_value = [display()]
+        native.get_display_geometry.return_value = display()
+        native.foreground_process_id.return_value = os.getpid() + 1000
+        capture_factory = Mock()
+        with tempfile.TemporaryDirectory() as folder, patch.object(app, "IS_MACOS", True), \
+                patch.object(app, "native", native), patch.object(app, "DisplayCapture", capture_factory, create=True):
+            controller = app.Controller(Path(folder))
+            try:
+                controller.timer.stop()
+                controller.scanning = True
+                controller.calibration_requested = True
+                controller.mac_capture_verified = True
+                controller.future = Future()
+                controller.future.set_exception(CaptureUnavailable("permission_denied", "User declined"))
+                controller.job_kind = "recognition"
+                controller.job_generation = controller.generation
+                # An authorization dialog can change the context before the error is returned.
+                with self.assertLogs(level="ERROR"), patch.object(controller, "submit") as submit:
+                    controller.tick()
+                    submit.assert_not_called()
+                self.assertFalse(controller.scanning)
+                self.assertFalse(controller.calibration_requested)
+                self.assertFalse(controller.mac_capture_verified)
+                self.assertTrue(controller.mac_capture_denied)
+                capture_factory.return_value.start.assert_not_called()
+            finally:
                 controller.executor.shutdown(wait=True)
                 controller.overlay.deleteLater()
                 controller.deleteLater()

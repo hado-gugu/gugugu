@@ -18,7 +18,7 @@ _REQUEST_TIMEOUT = 2.0
 _SOURCE = "macos_screencapturekit_display"
 
 
-def _request(begin):
+def _request(begin, kit, stage):
     """Wait for an Objective-C completion without dispatching to the GUI thread."""
     complete = threading.Event()
     response = None
@@ -28,13 +28,37 @@ def _request(begin):
         response = value, error
         complete.set()
 
-    begin(callback)
+    try:
+        begin(callback)
+    except Exception as error:
+        raise CaptureUnavailable("capture_error", f"{stage}失败。") from error
     if not complete.wait(_REQUEST_TIMEOUT):
-        raise CaptureUnavailable("capture_timeout", "等待所选显示器的画面超时。")
+        raise CaptureUnavailable("capture_timeout", f"{stage}超时。")
     value, error = response
-    if error is not None or value is None:
-        detail = error.localizedDescription() if error is not None else "系统未返回画面。"
-        raise CaptureUnavailable("capture_error", f"无法捕获所选显示器：{detail}")
+    if error is not None:
+        domain, code = str(error.domain()), int(error.code())
+        sc_domain = getattr(kit, "SCStreamErrorDomain", None)
+        # These are the SDK enum values. Only classify them as ScreenCaptureKit
+        # errors when the runtime also supplies a matching error domain.
+        declined = getattr(kit, "SCStreamErrorUserDeclined", -3801)
+        missing_entitlements = getattr(kit, "SCStreamErrorMissingEntitlements", -3803)
+        is_sc_error = sc_domain is not None and domain == str(sc_domain)
+        if is_sc_error and code == declined:
+            failure = CaptureUnavailable(
+                "permission_denied",
+                "macOS 未允许当前版本录屏。请在「系统设置 → 隐私与安全性 → 屏幕与系统音频录制」"
+                "为当前这份咕顾谷重新授权，再完全退出并重新打开。",
+            )
+        elif is_sc_error and code == missing_entitlements:
+            failure = CaptureUnavailable(
+                "capture_entitlements", "当前应用缺少系统要求的录屏配置，请反馈这个版本的构建问题。",
+            )
+        else:
+            failure = CaptureUnavailable("capture_error", f"{stage}失败。")
+        failure.add_note(f"ScreenCaptureKit {stage} · NSError domain={domain!r}, code={code}")
+        raise failure
+    if value is None:
+        raise CaptureUnavailable("capture_error", f"{stage}失败，系统未返回结果。")
     return value
 
 
@@ -97,12 +121,10 @@ class DisplayCapture:
                 import Quartz
                 import ScreenCaptureKit
                 import mac_native
-            except ImportError as error:
+            except (ImportError, OSError) as error:
                 raise CaptureUnavailable("dependency_missing", "缺少 Mac 显示器捕获组件。") from error
 
             with objc.autorelease_pool():
-                if not mac_native.has_capture_permission():
-                    raise CaptureUnavailable("permission_denied", "请在系统设置中允许咕顾谷录制屏幕，再重新打开软件。")
                 geometry = self._geometry(mac_native)
             self._runtime = objc, Quartz, ScreenCaptureKit, mac_native
             self._profile_id = geometry.get("profile_id")
@@ -123,7 +145,7 @@ class DisplayCapture:
         if self._filter is not None and self._filter_state == state:
             return self._filter
         list_content = kit.SCShareableContent.getShareableContentExcludingDesktopWindows_onScreenWindowsOnly_completionHandler_
-        content = _request(lambda complete: list_content(False, False, complete))
+        content = _request(lambda complete: list_content(False, False, complete), kit, "查询可捕获显示器")
         display = next((item for item in content.displays() if int(item.displayID()) == self.display_id), None)
         if display is None:
             raise CaptureUnavailable("display_unavailable", "系统当前未提供所选显示器的画面。")
@@ -196,7 +218,7 @@ class DisplayCapture:
         # Use the earlier request time to conservatively bound frame freshness.
         timestamp = time.monotonic()
         capture = kit.SCScreenshotManager.captureImageWithFilter_configuration_completionHandler_
-        image = _request(lambda complete: capture(capture_filter, config, complete))
+        image = _request(lambda complete: capture(capture_filter, config, complete), kit, "获取所选显示器画面")
         pixels = _bgr_from_image(quartz, image, pixel_size)
         geometry = self._geometry(native)
         if _display_state(geometry) != state:

@@ -31,6 +31,7 @@ jobs:
           binary="$bundle/Contents/MacOS/Gugugu"
           test "$(lipo -archs "$binary")" = arm64
           test "$(plutil -extract CFBundleShortVersionString raw "$bundle/Contents/Info.plist")" = 1.0.1
+          test -n "$(plutil -extract NSScreenCaptureUsageDescription raw "$bundle/Contents/Info.plist")"
           codesign --verify --deep --strict "$bundle"
           "$binary" --help | grep -F -- '--data-dir'
 
