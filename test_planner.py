@@ -62,6 +62,16 @@ class PlannerParityTests(unittest.TestCase):
         self.store.set_enabled(False)
         self.assertIsNone(self.catalog.reminder(self.store.state, "operator", "char_496_wildmn"))
 
+    def test_saved_legacy_operator_ids_match_current_ocr_ids(self):
+        state = self.store.state
+        legacy = "chess_char_1_19_a"
+        state["transitions"] = [legacy]
+        self.assertEqual(self.catalog.reminder(state, "operator", "char_496_wildmn"), "transition")
+        state["presets"][0]["targets"] = [legacy, "chess_char_1_01_a"]
+        self.assertEqual(self.catalog.reminder(state, "operator", "char_496_wildmn"), "target")
+        self.assertIsNone(self.catalog.reminder(state, "operator", "char_4207_branch"))
+        self.assertIsNone(self.catalog.reminder(state, "operator", "char_498_inside"))
+
     def test_equipment_variants_share_one_selection_and_reminder(self):
         self.store.toggle_equipment("chess_item_1_03_e_b", True)
         self.assertEqual(self.store.active()["equipment"], ["chess_item_1_03_e_a"])

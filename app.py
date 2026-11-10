@@ -85,6 +85,8 @@ class ReminderOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        if IS_MACOS:
+            self.setAttribute(Qt.WidgetAttribute.WA_MacAlwaysShowToolWindow)
         self.setStyleSheet("background: transparent; border: none;")
         self.setAutoFillBackground(False)
         self.marker_opacity = 1.0
@@ -944,6 +946,7 @@ class Controller(QWidget):
             self.set_status("识别结果已过期，正在等待新画面。")
             return
         keys, matches, names = set(), [], []
+        pending_reminders = 0
         state = self.store.state
         resolved = []
         for candidate in observation["candidates"]:
@@ -968,8 +971,11 @@ class Controller(QWidget):
             fast_confirmed = (observation.get("frame_stable") is True
                               or candidate.get("independently_confirmed") is True
                               or candidate.get("frame_verified") is True) and candidate["score"] >= .95
-            if reminder and (fast_confirmed or key in self.previous_keys):
-                matches.append({**candidate, "reminder": reminder})
+            if reminder:
+                if fast_confirmed or key in self.previous_keys:
+                    matches.append({**candidate, "reminder": reminder})
+                else:
+                    pending_reminders += 1
         self.previous_keys = keys
         self.matches = matches
         self.last_good = time.monotonic()
@@ -1001,7 +1007,14 @@ class Controller(QWidget):
             timing = "兼容路径 · " + timing
         if diagnostics.get("theme"):
             timing = f"{diagnostics['theme']} · {timing}"
-        self.set_status(f"扫描中 · {len(names)} 个名称 · {len(matches)} 个提醒 · {timing}")
+        status = f"扫描中 · {len(names)} 个名称 · {len(matches)} 个提醒"
+        if not state["enabled"]:
+            status += " · 局内提醒已关闭"
+        elif pending_reminders:
+            status += f" · {pending_reminders} 个等待复核"
+        elif names and not matches:
+            status += " · 未匹配提醒名单"
+        self.set_status(f"{status} · {timing}")
 
     def expire_uncertain(self):
         if self.uncertain_since is not None and time.monotonic()-self.uncertain_since >= .35:

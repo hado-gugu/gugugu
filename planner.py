@@ -113,13 +113,14 @@ def active_preset(state: dict) -> dict | None:
     return next((p for p in state.get("presets", []) if p["id"] == state.get("activeId")), None)
 
 
-def reminder_of(state: dict, char_id: str) -> str | None:
+def reminder_of(state: dict, char_id: str, aliases: dict[str, str] | None = None) -> str | None:
     if not state.get("enabled") or not valid_id(char_id):
         return None
+    aliases = aliases or {}
     preset = active_preset(state)
-    if preset and char_id in preset["targets"]:
+    if preset and any(aliases.get(target, target) == char_id for target in preset["targets"]):
         return "target"
-    return "transition" if char_id in state.get("transitions", []) else None
+    return "transition" if any(aliases.get(item, item) == char_id for item in state.get("transitions", [])) else None
 
 
 class Catalog:
@@ -191,7 +192,7 @@ class Catalog:
             char_id = self.resolve_operator_id(value)
             if self.operator_by_id.get(char_id, {}).get("retired", False):
                 return None
-            return reminder_of(state, char_id)
+            return reminder_of(state, char_id, self.operator_aliases)
         if kind not in ("equipment", "item") or not state.get("enabled"):
             return None
         family = self.resolve_equipment_id(value)
